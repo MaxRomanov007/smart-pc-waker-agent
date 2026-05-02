@@ -41,6 +41,27 @@ func (s *Service) SetCanPowerOn(ctx context.Context, pcID string, canPowerOn boo
 	return nil
 }
 
+func (s *Service) GetPcs(ctx context.Context) ([]models.Pc, error) {
+	const op = "pcs-service.GetPcs"
+
+	resp, err := authorization.DoNewRequest[[]models.Pc](
+		ctx,
+		s.apiClient,
+		http.MethodGet,
+		s.url("/pcs"),
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to do request: %w", op, err)
+	}
+
+	if resp.Status != response.StatusOK {
+		return nil, fmt.Errorf("%s: status is not OK: %s", op, resp.Status)
+	}
+
+	return *resp.Data, nil
+}
+
 func New(
 	ctx context.Context,
 	auth *authorization.Auth,

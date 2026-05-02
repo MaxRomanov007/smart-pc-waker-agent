@@ -8,6 +8,7 @@ import (
 	httpServer "smart-pc-waker-agent/internal/http-server"
 	"smart-pc-waker-agent/internal/lib/logger"
 	"smart-pc-waker-agent/internal/mqtt"
+	pcsChecker "smart-pc-waker-agent/internal/pcs-checker"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
 	"syscall"
@@ -68,5 +69,7 @@ func main() {
 		}
 	}()
 
-	waitable.WaitAll(mqttConn, srv)
+	checker := pcsChecker.New(ctx, log, cfg.Checker.Interval, pcs, storage, storage)
+
+	waitable.WaitAll(mqttConn, srv, checker)
 }

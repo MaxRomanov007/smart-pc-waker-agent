@@ -21,6 +21,7 @@ type Config struct {
 	MQTT       MQTT                 `yaml:"mqtt"`
 	Auth       Auth                 `yaml:"auth"`
 	Services   Services             `yaml:"services"`
+	Checker    Checker              `yaml:"checker"`
 
 	Storage Storage `yaml:"storage"`
 
@@ -83,6 +84,10 @@ type Services struct {
 type PcsService struct {
 	Timeout time.Duration `yaml:"timeout"  env-default:"5s"`
 	BaseURL string        `yaml:"base_url" env-default:"http://localhost:9080/pcs"`
+}
+
+type Checker struct {
+	Interval time.Duration `yaml:"interval" env-default:"24h"`
 }
 
 func MustLoad(ctx context.Context) *Config {

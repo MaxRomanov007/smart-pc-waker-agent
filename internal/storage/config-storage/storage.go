@@ -3,6 +3,7 @@ package configStorage
 import (
 	"context"
 	"fmt"
+	"slices"
 	"smart-pc-waker-agent/internal/config"
 	"smart-pc-waker-agent/internal/domain/models"
 	"smart-pc-waker-agent/internal/storage"
@@ -105,4 +106,21 @@ func (s *Storage) GetPcs(_ context.Context) ([]models.Registered, error) {
 	}
 
 	return registered, nil
+}
+
+func (s *Storage) DeletePcByID(_ context.Context, pcID string) error {
+	const op = "storage.config-storage.DeletePcByID"
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.cfg.Storage.Pcs = slices.DeleteFunc(s.cfg.Storage.Pcs, func(p config.Pc) bool {
+		return p.ID == pcID
+	})
+
+	if err := s.cfg.Save(); err != nil {
+		return fmt.Errorf("%s: failed to save config: %w", op, err)
+	}
+
+	return nil
 }
