@@ -16,42 +16,45 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
+            name: agent-linux-amd64
 
           - goos: linux
             goarch: 386
+            name: agent-linux-386
 
           - goos: linux
             goarch: arm64
+            name: agent-linux-arm64
 
-          # ARMv5 — старые роутеры (Marvell Kirkwood и т.п.)
           - goos: linux
             goarch: arm
             goarm: "5"
+            name: agent-linux-armv5
 
-          # ARMv6 — Raspberry Pi 1, некоторые OpenWrt-устройства
           - goos: linux
             goarch: arm
             goarm: "6"
+            name: agent-linux-armv6
 
-          # ARMv7 — большинство современных ARM-роутеров
           - goos: linux
             goarch: arm
             goarm: "7"
+            name: agent-linux-armv7
 
-          # MIPS big-endian — Atheros, Broadcom (OpenWrt/DD-WRT)
           - goos: linux
             goarch: mips
             gomips: softfloat
+            name: agent-linux-mips
 
-          # MIPS little-endian — MediaTek (OpenWrt)
           - goos: linux
             goarch: mipsle
             gomips: softfloat
+            name: agent-linux-mipsle
 
-          # MIPS64 little-endian — более мощные MIPS-роутеры
           - goos: linux
             goarch: mips64le
             gomips: softfloat
+            name: agent-linux-mips64le
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -70,25 +73,21 @@ jobs:
           GOMIPS: ${{ matrix.gomips }}
           CGO_ENABLED: "0"
         run: |
-          SUFFIX=""
-          [ -n "${{ matrix.goarm }}" ] && SUFFIX="v${{ matrix.goarm }}"
-
           go build \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
             -trimpath \
-            -o dist/agent-${{ matrix.goos }}-${{ matrix.goarch }}${SUFFIX} \
+            -o dist/${{ matrix.name }} \
             ./cmd/agent
 
       - name: Package
         run: |
           cd dist
-          NAME="agent-${{ matrix.goos }}-${{ matrix.goarch }}$( [ -n "${{ matrix.goarm }}" ] && echo "v${{ matrix.goarm }}" )"
-          tar -czf ${NAME}.tar.gz ${NAME}
-          rm ${NAME}
+          tar -czf ${{ matrix.name }}.tar.gz ${{ matrix.name }}
+          rm ${{ matrix.name }}
 
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm }}
+          name: binary-${{ matrix.name }}
           path: dist/
 
   release:
