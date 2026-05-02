@@ -15,10 +15,12 @@ import (
 )
 
 type Config struct {
-	Env     string               `yaml:"env"      env-default:"production"`
-	LogPath *userScope.CachePath `yaml:"log_path" env-default:"log.log"`
-	MQTT    MQTT                 `yaml:"mqtt"`
-	Auth    Auth                 `yaml:"auth"`
+	Env        string               `yaml:"env"         env-default:"production"`
+	LogPath    *userScope.CachePath `yaml:"log_path"    env-default:"log.log"`
+	HTTPServer HTTPServer           `yaml:"http_server"`
+	MQTT       MQTT                 `yaml:"mqtt"`
+	Auth       Auth                 `yaml:"auth"`
+	Services   Services             `yaml:"services"`
 
 	Storage Storage `yaml:"storage"`
 
@@ -28,6 +30,13 @@ type Config struct {
 type Storage struct {
 	Pcs       []Pc          `yaml:"pcs"`
 	AuthToken *oauth2.Token `yaml:"auth_token"`
+}
+
+type HTTPServer struct {
+	Address         string        `yaml:"address"          env-default:"localhost:8506"`
+	Timeout         time.Duration `yaml:"timeout"          env-default:"4s"`
+	IdleTimeout     time.Duration `yaml:"idle_timeout"     env-default:"60s"`
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"1s"`
 }
 
 type Pc struct {
@@ -65,6 +74,15 @@ type Oauth2 struct {
 type Oauth2Endpoint struct {
 	AuthURL  string `yaml:"auth_url"  env-default:"http://kratos:4444/oauth2/auth"`
 	TokenURL string `yaml:"token_url" env-default:"http://kratos:4444/oauth2/token"`
+}
+
+type Services struct {
+	Pcs PcsService `yaml:"pcs"`
+}
+
+type PcsService struct {
+	Timeout time.Duration `yaml:"timeout"  env-default:"5s"`
+	BaseURL string        `yaml:"base_url" env-default:"http://localhost:9080/pcs"`
 }
 
 func MustLoad(ctx context.Context) *Config {

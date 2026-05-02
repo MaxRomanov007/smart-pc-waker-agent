@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"smart-pc-waker-agent/internal/config"
+	httpServer "smart-pc-waker-agent/internal/http-server"
 	"smart-pc-waker-agent/internal/lib/logger"
 	"smart-pc-waker-agent/internal/mqtt"
+	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
 	"syscall"
 
@@ -52,5 +54,19 @@ func main() {
 		log.Info("mqtt connection closed")
 	}()
 
-	waitable.WaitAll(mqttConn)
+	pcs, err := pcsService.New(ctx, auth, cfg.Services.Pcs)
+	if err != nil {
+		log.Error("failed to create pcs service", sl.Err(err))
+		os.Exit(1)
+	}
+
+	srv := httpServer.New(log, cfg.HTTPServer, storage, pcs)
+	go func() {
+		if err := srv.Run(ctx); err != nil {
+			log.Error("http server error", sl.Err(err))
+			os.Exit(1)
+		}
+	}()
+
+	waitable.WaitAll(mqttConn, srv)
 }
