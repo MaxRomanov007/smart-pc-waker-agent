@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"smart-pc-waker-agent/internal/config"
@@ -20,14 +21,15 @@ import (
 )
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	cfg := config.MustLoad(ctx)
 
-	logCtx, cancelLogCtx := context.WithCancel(context.Background())
-	defer cancelLogCtx()
-	log := logger.MustSetupLogger(logCtx, cfg.Env, string(*cfg.LogPath))
+	log := logger.MustSetupLogger(ctx, cfg.Env, string(*cfg.LogPath))
 
 	log.Debug("debug messages are enabled")
 
@@ -38,6 +40,27 @@ func main() {
 		log.Error("failed to create auth", sl.Err(err))
 		os.Exit(1)
 	}
+
+	pcs, err := pcsService.New(ctx, auth, cfg.Services.Pcs)
+	if err != nil {
+		log.Error("failed to create pcs service", sl.Err(err))
+		os.Exit(1)
+	}
+
+	log.Info("set pcs can power on")
+	if err := setCanPowerOn(ctx, storage, pcs, true); err != nil {
+		log.Error("failed to set can_power_on", sl.Err(err))
+	}
+	go func() {
+		<-signalCtx.Done()
+
+		log.Info("set pcs can not power on")
+		if err := setCanPowerOn(ctx, storage, pcs, false); err != nil {
+			log.Error("failed to set can_power_on", sl.Err(err))
+		}
+
+		cancel()
+	}()
 
 	mqttConn, err := mqtt.New(
 		ctx,
@@ -55,12 +78,6 @@ func main() {
 		log.Info("mqtt connection closed")
 	}()
 
-	pcs, err := pcsService.New(ctx, auth, cfg.Services.Pcs)
-	if err != nil {
-		log.Error("failed to create pcs service", sl.Err(err))
-		os.Exit(1)
-	}
-
 	srv := httpServer.New(log, cfg.HTTPServer, storage, pcs)
 	go func() {
 		if err := srv.Run(ctx); err != nil {
@@ -72,4 +89,29 @@ func main() {
 	checker := pcsChecker.New(ctx, log, cfg.Checker.Interval, pcs, storage, storage)
 
 	waitable.WaitAll(mqttConn, srv, checker)
+}
+
+func setCanPowerOn(
+	ctx context.Context,
+	storage *configStorage.Storage,
+	service *pcsService.Service,
+	canPowerOn bool,
+) error {
+	const op = "setCanPowerOn"
+
+	registered, err := storage.GetPcs(ctx)
+	if err != nil {
+		return fmt.Errorf("%s: failed to get registered pcs: %w", op, err)
+	}
+
+	ids := make([]string, len(registered))
+	for i, pc := range registered {
+		ids[i] = pc.ID
+	}
+
+	if err := service.SetCanPowerOnForIds(ctx, ids, canPowerOn); err != nil {
+		return fmt.Errorf("%s: failed to set can_power_on: %w", op, err)
+	}
+
+	return nil
 }

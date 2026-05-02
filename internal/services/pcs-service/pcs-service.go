@@ -2,6 +2,7 @@ package pcsService
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"smart-pc-waker-agent/internal/config"
@@ -60,6 +61,22 @@ func (s *Service) GetPcs(ctx context.Context) ([]models.Pc, error) {
 	}
 
 	return *resp.Data, nil
+}
+
+func (s *Service) SetCanPowerOnForIds(ctx context.Context, pcIDs []string, canPowerOn bool) error {
+	const op = "pcs-service.UpdatePcCommand"
+
+	errs := make([]error, 0, len(pcIDs))
+	for _, pcID := range pcIDs {
+		if err := s.SetCanPowerOn(ctx, pcID, canPowerOn); err != nil {
+			errs = append(errs, fmt.Errorf("failed to set can_power_on (pcID: %s): %w", pcID, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%s: failed to set can_power_on: %w", op, errors.Join(errs...))
+	}
+
+	return nil
 }
 
 func New(
