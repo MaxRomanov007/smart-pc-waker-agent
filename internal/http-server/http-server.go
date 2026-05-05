@@ -6,7 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"smart-pc-waker-agent/internal/auth"
 	"smart-pc-waker-agent/internal/config"
+	authCallback "smart-pc-waker-agent/internal/http-server/handlers/auth/callback"
+	getStatus "smart-pc-waker-agent/internal/http-server/handlers/auth/get-status"
+	getURL "smart-pc-waker-agent/internal/http-server/handlers/auth/get-url"
 	createRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/create-registered"
 	getRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/get-registered"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
@@ -25,15 +29,14 @@ type Server struct {
 	HTTPServer *http.Server
 	log        *slog.Logger
 	cfg        config.HTTPServer
-
-	done chan struct{}
+	router     *chi.Mux
+	done       chan struct{}
 }
 
 func New(
 	log *slog.Logger,
-	cfg config.HTTPServer,
-	storage *configStorage.Storage,
-	service *pcsService.Service,
+	cfg *config.Config,
+	a *auth.Auth,
 ) *Server {
 	r := chi.NewRouter()
 	r.Use(
@@ -42,29 +45,41 @@ func New(
 		logmw.New(log),
 	)
 
-	v := validator.New()
-	v.RegisterTagNameFunc(jsonTagName.New())
-
-	r.Route("/registered", func(r chi.Router) {
-		r.Get("/", getRegistered.New(log, storage))
-		r.With(reqmw.New[createRegistered.Request](log, v)).
-			Post("/", createRegistered.New(log, service, storage))
+	r.Route("/auth", func(r chi.Router) {
+		r.Get("/status", getStatus.New(log, a))
+		r.Get("/url", getURL.New(log, a, cfg.Auth.CallbackURL))
+		r.Get("/callback", authCallback.New(log, a))
 	})
 
 	srv := &http.Server{
-		Addr:         cfg.Address,
+		Addr:         cfg.HTTPServer.Address,
 		Handler:      r,
-		ReadTimeout:  cfg.Timeout,
-		WriteTimeout: cfg.Timeout,
-		IdleTimeout:  cfg.IdleTimeout,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
 	}
 
 	return &Server{
 		HTTPServer: srv,
+		router:     r,
 		log:        log,
-		cfg:        cfg,
+		cfg:        cfg.HTTPServer,
 		done:       make(chan struct{}),
 	}
+}
+
+func (s *Server) Mount(
+	storage *configStorage.Storage,
+	service *pcsService.Service,
+) {
+	v := validator.New()
+	v.RegisterTagNameFunc(jsonTagName.New())
+
+	s.router.Route("/registered", func(r chi.Router) {
+		r.Get("/", getRegistered.New(s.log, storage))
+		r.With(reqmw.New[createRegistered.Request](s.log, v)).
+			Post("/", createRegistered.New(s.log, service, storage))
+	})
 }
 
 func (s *Server) Done() <-chan struct{} {
@@ -78,12 +93,11 @@ func (s *Server) Run(ctx context.Context) error {
 	defer close(s.done)
 
 	log.Info("starting http server", slog.String("address", s.HTTPServer.Addr))
+
 	errorChan := make(chan error, 1)
 	go func() {
 		if err := s.start(); err != nil {
-			log.Error("failed to start http server", sl.Err(err))
 			errorChan <- err
-			return
 		}
 	}()
 
@@ -96,7 +110,6 @@ func (s *Server) Run(ctx context.Context) error {
 
 		log.Info("shutting down http server")
 		if err := s.stop(stopCtx); err != nil {
-			log.Error("failed to stop http server", sl.Err(err))
 			return fmt.Errorf("%s: error stopping http server: %w", op, err)
 		}
 		log.Info("http server stopped")
@@ -106,20 +119,20 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) start() error {
-	const op = "http-server.Start"
+	const op = "http-server.start"
 
 	if err := s.HTTPServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("%s: failed to start server: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
 }
 
 func (s *Server) stop(ctx context.Context) error {
-	const op = "http-server.Stop"
+	const op = "http-server.stop"
 
 	if err := s.HTTPServer.Shutdown(ctx); err != nil {
-		return fmt.Errorf("%s: failed to stop server: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil

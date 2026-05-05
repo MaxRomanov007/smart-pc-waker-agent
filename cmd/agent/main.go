@@ -29,28 +29,50 @@ func main() {
 
 	cfg := config.MustLoad(ctx)
 
-	log := logger.MustSetupLogger(ctx, cfg.Env, string(*cfg.LogPath))
-
+	log := logger.MustSetupLogger(ctx, cfg.Env, string(cfg.LogPath))
 	log.Debug("debug messages are enabled")
 
 	storage := configStorage.New(cfg)
 
+	// Auth инициализируется всегда — даже если токена ещё нет.
+	// В этом случае агент запустится без авторизации; клиент должен
+	// вызвать GET /auth/url → пройти flow → GET /auth/callback.
 	auth, err := authorization.New(ctx, cfg.Auth, storage, storage)
 	if err != nil {
 		log.Error("failed to create auth", sl.Err(err))
 		os.Exit(1)
 	}
 
-	pcs, err := pcsService.New(ctx, auth, cfg.Services.Pcs)
+	srv := httpServer.New(log, cfg, auth)
+	go func() {
+		if err := srv.Run(ctx); err != nil {
+			log.Error("http server error", sl.Err(err))
+			os.Exit(1)
+		}
+	}()
+
+	if !auth.IsAuthorized() {
+		log.Warn("agent is not authorized; use GET /auth/url to complete authorization")
+	}
+
+	if err := auth.WaitReady(ctx); err != nil {
+		log.Error("authorization failed or context cancelled", sl.Err(err))
+		os.Exit(1)
+	}
+
+	pcs, err := pcsService.New(auth, cfg.Services.Pcs)
 	if err != nil {
 		log.Error("failed to create pcs service", sl.Err(err))
 		os.Exit(1)
 	}
 
+	srv.Mount(storage, pcs)
+
 	log.Info("set pcs can power on")
 	if err := setCanPowerOn(ctx, storage, pcs, true); err != nil {
 		log.Error("failed to set can_power_on", sl.Err(err))
 	}
+
 	go func() {
 		<-signalCtx.Done()
 
@@ -62,13 +84,7 @@ func main() {
 		cancel()
 	}()
 
-	mqttConn, err := mqtt.New(
-		ctx,
-		log,
-		cfg.MQTT,
-		auth,
-		storage,
-	)
+	mqttConn, err := mqtt.New(ctx, log, cfg.MQTT, auth, storage)
 	if err != nil {
 		log.Error("failed to create mqtt connection", sl.Err(err))
 		os.Exit(1)
@@ -76,14 +92,6 @@ func main() {
 	go func() {
 		<-mqttConn.Done()
 		log.Info("mqtt connection closed")
-	}()
-
-	srv := httpServer.New(log, cfg.HTTPServer, storage, pcs)
-	go func() {
-		if err := srv.Run(ctx); err != nil {
-			log.Error("http server error", sl.Err(err))
-			os.Exit(1)
-		}
 	}()
 
 	checker := pcsChecker.New(ctx, log, cfg.Checker.Interval, pcs, storage, storage)

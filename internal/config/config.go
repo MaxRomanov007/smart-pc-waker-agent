@@ -15,17 +15,16 @@ import (
 )
 
 type Config struct {
-	Env        string               `yaml:"env"         env-default:"production"`
-	LogPath    *userScope.CachePath `yaml:"log_path"    env-default:"log.log"`
-	HTTPServer HTTPServer           `yaml:"http_server"`
-	MQTT       MQTT                 `yaml:"mqtt"`
-	Auth       Auth                 `yaml:"auth"`
-	Services   Services             `yaml:"services"`
-	Checker    Checker              `yaml:"checker"`
+	Env        string     `yaml:"env"         env-default:"production"`
+	LogPath    string     `yaml:"log_path"                             env:"LOG_PATH"`
+	HTTPServer HTTPServer `yaml:"http_server"`
+	MQTT       MQTT       `yaml:"mqtt"`
+	Auth       Auth       `yaml:"auth"`
+	Services   Services   `yaml:"services"`
+	Checker    Checker    `yaml:"checker"`
+	Storage    Storage    `yaml:"storage"`
 
-	Storage Storage `yaml:"storage"`
-
-	file *os.File
+	file *os.File `yaml:"-"`
 }
 
 type Storage struct {
@@ -34,7 +33,7 @@ type Storage struct {
 }
 
 type HTTPServer struct {
-	Address         string        `yaml:"address"          env-default:"localhost:8506"`
+	Address         string        `yaml:"address"          env-default:"127.0.0.1:8506"`
 	Timeout         time.Duration `yaml:"timeout"          env-default:"4s"`
 	IdleTimeout     time.Duration `yaml:"idle_timeout"     env-default:"60s"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"1s"`
@@ -46,24 +45,16 @@ type Pc struct {
 }
 
 type MQTT struct {
-	BrokerURL             string `yaml:"broker_url"              env-default:"tcp://localhost:1883"`
+	BrokerURL             string `yaml:"broker_url"              env-default:"wss://mqtt.smartpc.site/mqtt"`
 	ClientIDPrefix        string `yaml:"client_id_prefix"        env-default:"smart_pc_waker_"`
 	SessionExpiryInterval uint32 `yaml:"session_expiry_interval" env-default:"60"`
 	KeepAlive             uint16 `yaml:"keep_alive"              env-default:"20"`
 }
 
 type Auth struct {
-	Oauth2      Oauth2       `yaml:"oauth2"`
-	Callback    AuthCallback `yaml:"callback"`
-	UserinfoURL string       `yaml:"userinfo_url" env-default:"http://kratos:4444/userinfo"`
-}
-
-type AuthCallback struct {
-	Host         string        `yaml:"host"          env-default:"127.0.0.1"`
-	TTL          time.Duration `yaml:"ttl"           env-default:"5m"`
-	ReadTimeout  time.Duration `yaml:"read_timeout"  env-default:"5s"`
-	WriteTimeout time.Duration `yaml:"write_timeout" env-default:"5s"`
-	IdleTimeout  time.Duration `yaml:"idle_timeout"  env-default:"5s"`
+	Oauth2      Oauth2 `yaml:"oauth2"`
+	CallbackURL string `yaml:"callback_url" env-default:"http://127.0.0.1:8506/waker/auth/callback"`
+	UserinfoURL string `yaml:"userinfo_url" env-default:"https://hydra.smartpc.site/userinfo"`
 }
 
 type Oauth2 struct {
@@ -73,8 +64,8 @@ type Oauth2 struct {
 }
 
 type Oauth2Endpoint struct {
-	AuthURL  string `yaml:"auth_url"  env-default:"http://kratos:4444/oauth2/auth"`
-	TokenURL string `yaml:"token_url" env-default:"http://kratos:4444/oauth2/token"`
+	AuthURL  string `yaml:"auth_url"  env-default:"https://hydra.smartpc.site/oauth2/auth"`
+	TokenURL string `yaml:"token_url" env-default:"https://hydra.smartpc.site/oauth2/token"`
 }
 
 type Services struct {
@@ -83,7 +74,7 @@ type Services struct {
 
 type PcsService struct {
 	Timeout time.Duration `yaml:"timeout"  env-default:"5s"`
-	BaseURL string        `yaml:"base_url" env-default:"http://localhost:9080/pcs"`
+	BaseURL string        `yaml:"base_url" env-default:"https://api.smartpc.site/pcs"`
 }
 
 type Checker struct {
@@ -96,14 +87,23 @@ func MustLoad(ctx context.Context) *Config {
 	if err := cfg.openConfigFile(); err != nil {
 		panic(err)
 	}
+
+	isNew, err := cfg.isEmptyFile()
+	if err != nil {
+		panic(err)
+	}
+
 	if err := cfg.readAndApplyDefaults(); err != nil {
 		panic(err)
 	}
 	if err := cfg.applyLogPathDefault(); err != nil {
 		panic(err)
 	}
-	if err := cfg.Save(); err != nil {
-		panic(err)
+
+	if isNew { // ← fix #3: сохраняем только если файл был новым
+		if err := cfg.Save(); err != nil {
+			panic(err)
+		}
 	}
 
 	go func() {
@@ -120,10 +120,24 @@ func MustLoad(ctx context.Context) *Config {
 func (c *Config) readAndApplyDefaults() error {
 	const op = "config.readAndApplyDefaults"
 
+	info, err := c.file.Stat()
+	if err != nil {
+		return fmt.Errorf("%s: failed to stat file: %w", op, err)
+	}
+
+	if info.Size() == 0 {
+		// Пустой файл: применяем дефолты из struct-тегов и переменных окружения
+		// cleanenv.ReadEnv не парсит YAML, поэтому не упадёт на пустом входе
+		if err := cleanenv.ReadEnv(c); err != nil {
+			return fmt.Errorf("%s: failed to set defaults: %w", op, err)
+		}
+		return nil
+	}
+
 	// Если файл пустой — cleanenv всё равно применит env-default значения.
 	// Если непустой — распарсит yaml и поверх наложит env-переменные.
 	if err := cleanenv.ReadConfig(c.file.Name(), c); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: failed to read config file: %w", op, err)
 	}
 
 	return nil
@@ -133,7 +147,7 @@ func (c *Config) readAndApplyDefaults() error {
 func (c *Config) applyLogPathDefault() error {
 	const op = "config.applyLogPathDefault"
 
-	if c.LogPath != nil {
+	if c.LogPath != "" {
 		return nil
 	}
 
@@ -141,7 +155,7 @@ func (c *Config) applyLogPathDefault() error {
 	if err != nil {
 		return fmt.Errorf("%s: failed to create log path: %w", op, err)
 	}
-	c.LogPath = &lp
+	c.LogPath = string(lp)
 
 	return nil
 }
@@ -202,5 +216,17 @@ func (c *Config) Save() error {
 		return fmt.Errorf("%s: failed to write file: %w", op, err)
 	}
 
+	if err := c.file.Sync(); err != nil {
+		return fmt.Errorf("%s: failed to sync file: %w", op, err)
+	}
+
 	return nil
+}
+
+func (c *Config) isEmptyFile() (bool, error) {
+	info, err := c.file.Stat()
+	if err != nil {
+		return false, fmt.Errorf("config.isEmptyFile: %w", err)
+	}
+	return info.Size() == 0, nil
 }

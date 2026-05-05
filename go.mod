@@ -3,7 +3,7 @@ module smart-pc-waker-agent
 go 1.26
 
 require (
-	github.com/MaxRomanov007/smart-pc-go-lib v1.0.12
+	github.com/MaxRomanov007/smart-pc-go-lib v1.1.0
 	github.com/go-chi/render v1.0.3
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/ilyakaznacheev/cleanenv v1.5.0

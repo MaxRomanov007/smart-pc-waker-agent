@@ -5,22 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	authorization "smart-pc-waker-agent/internal/auth"
 	"smart-pc-waker-agent/internal/config"
 
 	"github.com/MaxRomanov007/smart-pc-go-lib/api/response"
-	"github.com/MaxRomanov007/smart-pc-go-lib/authorization"
+	apiclient "github.com/MaxRomanov007/smart-pc-go-lib/authorization/api-client"
 	"github.com/MaxRomanov007/smart-pc-go-lib/domain/models"
 )
 
 type Service struct {
-	apiClient *authorization.ApiClient
+	apiClient *apiclient.Client
 	baseURL   string
 }
 
 func (s *Service) SetCanPowerOn(ctx context.Context, pcID string, canPowerOn bool) error {
 	const op = "pcs-service.UpdatePcCommand"
 
-	resp, err := authorization.DoNewRequest[models.Command](
+	resp, err := apiclient.Send[models.Command](
 		ctx,
 		s.apiClient,
 		http.MethodPatch,
@@ -45,7 +46,7 @@ func (s *Service) SetCanPowerOn(ctx context.Context, pcID string, canPowerOn boo
 func (s *Service) GetPcs(ctx context.Context) ([]models.Pc, error) {
 	const op = "pcs-service.GetPcs"
 
-	resp, err := authorization.DoNewRequest[[]models.Pc](
+	resp, err := apiclient.Send[[]models.Pc](
 		ctx,
 		s.apiClient,
 		http.MethodGet,
@@ -80,18 +81,17 @@ func (s *Service) SetCanPowerOnForIds(ctx context.Context, pcIDs []string, canPo
 }
 
 func New(
-	ctx context.Context,
 	auth *authorization.Auth,
 	cfg config.PcsService,
 ) (*Service, error) {
 	const op = "pcs-service.New"
 
-	client, err := auth.NewApiClient(ctx, &http.Client{
-		Timeout: cfg.Timeout,
-	})
+	a, err := auth.Inner()
 	if err != nil {
-		return nil, fmt.Errorf("%s: failed to create api client: %w", op, err)
+		return nil, fmt.Errorf("%s: failed to get auth: %w", op, err)
 	}
+
+	client := apiclient.New(&http.Client{Timeout: cfg.Timeout}, a)
 
 	service := &Service{
 		apiClient: client,

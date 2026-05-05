@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	authorization "smart-pc-waker-agent/internal/auth"
 	"smart-pc-waker-agent/internal/config"
 	"smart-pc-waker-agent/internal/lib/random"
 	powerOn "smart-pc-waker-agent/internal/mqtt/commands/power-on"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
 	"strings"
 
-	"github.com/MaxRomanov007/smart-pc-go-lib/authorization"
 	"github.com/MaxRomanov007/smart-pc-go-lib/commands"
 	commandMessage "github.com/MaxRomanov007/smart-pc-go-lib/domain/models/command-message"
 	mqttAuth "github.com/MaxRomanov007/smart-pc-go-lib/mqtt-auth"
@@ -78,7 +78,12 @@ func createMQTTConfig(
 ) (*mqttAuth.ClientConfig, *mqttAuth.Router, error) {
 	const op = "mqtt.createMQTTConfig"
 
-	cfg, router, err := mqttAuth.NewClientConfigWithRouter(ctx, auth)
+	a, err := auth.Inner()
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: failed to get auth: %w", op, err)
+	}
+
+	cfg, router, err := mqttAuth.NewClientConfigWithRouter(ctx, a)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"%s: failed to create new client config with router: %w",
