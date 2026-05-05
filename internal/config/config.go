@@ -33,7 +33,7 @@ type Storage struct {
 }
 
 type HTTPServer struct {
-	Address         string        `yaml:"address"          env-default:"127.0.0.1:8506"`
+	Address         string        `yaml:"address"          env-default:"0.0.0.0:8506"`
 	Timeout         time.Duration `yaml:"timeout"          env-default:"4s"`
 	IdleTimeout     time.Duration `yaml:"idle_timeout"     env-default:"60s"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"1s"`
