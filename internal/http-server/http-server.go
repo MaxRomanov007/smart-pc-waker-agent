@@ -12,6 +12,7 @@ import (
 	getStatus "smart-pc-waker-agent/internal/http-server/handlers/auth/get-status"
 	getURL "smart-pc-waker-agent/internal/http-server/handlers/auth/get-url"
 	createRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/create-registered"
+	deleteAll "smart-pc-waker-agent/internal/http-server/handlers/registered/delete-all"
 	getRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/get-registered"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
@@ -79,6 +80,7 @@ func (s *Server) Mount(
 		r.Get("/", getRegistered.New(s.log, storage))
 		r.With(reqmw.New[createRegistered.Request](s.log, v)).
 			Post("/", createRegistered.New(s.log, service, storage))
+		r.Delete("/", deleteAll.New(s.log, storage))
 	})
 }
 

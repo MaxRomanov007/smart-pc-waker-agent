@@ -124,3 +124,18 @@ func (s *Storage) DeletePcByID(_ context.Context, pcID string) error {
 
 	return nil
 }
+
+func (s *Storage) DeleteAllPcs(_ context.Context) error {
+	const op = "storage.config-storage.DeleteAllPcs"
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.cfg.Storage.Pcs = make([]config.Pc, 0)
+
+	if err := s.cfg.Save(); err != nil {
+		return fmt.Errorf("%s: failed to save config: %w", op, err)
+	}
+
+	return nil
+}
