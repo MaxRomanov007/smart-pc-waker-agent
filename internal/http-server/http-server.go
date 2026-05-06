@@ -80,7 +80,7 @@ func (s *Server) Mount(
 		r.Get("/", getRegistered.New(s.log, storage))
 		r.With(reqmw.New[createRegistered.Request](s.log, v)).
 			Post("/", createRegistered.New(s.log, service, storage))
-		r.Delete("/", deleteAll.New(s.log, storage))
+		r.Delete("/", deleteAll.New(s.log, storage, storage, service))
 	})
 }
 
