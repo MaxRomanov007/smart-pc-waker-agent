@@ -81,6 +81,7 @@ func (s *Service) SetCanPowerOnForIds(ctx context.Context, pcIDs []string, canPo
 }
 
 func New(
+	ctx context.Context,
 	auth *authorization.Auth,
 	cfg config.PcsService,
 ) (*Service, error) {
@@ -91,7 +92,12 @@ func New(
 		return nil, fmt.Errorf("%s: failed to get auth: %w", op, err)
 	}
 
-	client := apiclient.New(&http.Client{Timeout: cfg.Timeout}, a)
+	userinfo, err := a.FetchUserInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: failed to fetch userinfo: %w", op, err)
+	}
+
+	client := apiclient.NewWithUID(&http.Client{Timeout: cfg.Timeout}, a, userinfo.Sub)
 
 	service := &Service{
 		apiClient: client,

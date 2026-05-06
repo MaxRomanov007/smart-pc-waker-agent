@@ -60,7 +60,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	pcs, err := pcsService.New(auth, cfg.Services.Pcs)
+	pcs, err := pcsService.New(ctx, auth, cfg.Services.Pcs)
 	if err != nil {
 		log.Error("failed to create pcs service", sl.Err(err))
 		os.Exit(1)
