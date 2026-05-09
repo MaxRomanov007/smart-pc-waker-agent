@@ -36,7 +36,6 @@ func main() {
 	log := logger.MustSetupLogger(ctx, cfg.Env, cfg.LogPath)
 	log.Debug("debug messages are enabled")
 
-	// main.go роутер-агента
 	updater.New(ctx, log, "MaxRomanov007/smart-pc-waker-agent", version)
 
 	storage := configStorage.New(cfg)

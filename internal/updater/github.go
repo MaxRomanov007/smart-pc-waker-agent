@@ -103,14 +103,15 @@ func downloadBinary(release ReleaseInfo) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
 	}
 
 	binary, err := extractFromTarGz(resp.Body, archName())
 	if err != nil {
+		resp.Body.Close()
 		return nil, fmt.Errorf("extract: %w", err)
 	}
 

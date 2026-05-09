@@ -8,6 +8,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/MaxRomanov007/smart-pc-go-lib/logger/sl"
 )
 
 const defaultInterval = 3 * time.Hour
@@ -42,7 +44,12 @@ func WithOnUpdated(fn UpdatedFunc) Option {
 // New creates a Service and immediately starts the background polling loop.
 // repo is the GitHub repository in "owner/repo" format, e.g. "MaxRomanov007/smart-pc-waker-agent".
 // currentVersion must match the release tag format, e.g. "v1.2.3".
-func New(ctx context.Context, log *slog.Logger, repo, currentVersion string, opts ...Option) *Service {
+func New(
+	ctx context.Context,
+	log *slog.Logger,
+	repo, currentVersion string,
+	opts ...Option,
+) *Service {
 	s := &Service{
 		log:            log.With("component", "updater"),
 		repo:           repo,
@@ -88,7 +95,7 @@ func (s *Service) check() {
 	s.log.Info("applying update", slog.String("version", release.Version))
 
 	if err := apply(release); err != nil {
-		s.log.Error("update failed", "err", err)
+		s.log.Error("update failed", sl.Err(err))
 		return
 	}
 
@@ -107,7 +114,7 @@ func (s *Service) check() {
 func (s *Service) Check() (ReleaseInfo, bool, error) {
 	release, err := fetchLatestRelease(s.repo)
 	if err != nil {
-		s.log.Warn("update check failed", "err", err)
+		s.log.Warn("update check failed", sl.Err(err))
 		return ReleaseInfo{}, false, err
 	}
 
