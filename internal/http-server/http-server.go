@@ -14,6 +14,7 @@ import (
 	createRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/create-registered"
 	deleteAll "smart-pc-waker-agent/internal/http-server/handlers/registered/delete-all"
 	getRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/get-registered"
+	version2 "smart-pc-waker-agent/internal/http-server/handlers/version"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
 
@@ -38,6 +39,7 @@ func New(
 	log *slog.Logger,
 	cfg *config.Config,
 	a *auth.Auth,
+	version string,
 ) *Server {
 	r := chi.NewRouter()
 	r.Use(
@@ -46,6 +48,7 @@ func New(
 		logmw.New(log),
 	)
 
+	r.Get("/version", version2.New(log, version))
 	r.Route("/auth", func(r chi.Router) {
 		r.Get("/status", getStatus.New(log, a))
 		r.Get("/url", getURL.New(log, a, cfg.Auth.CallbackURL))

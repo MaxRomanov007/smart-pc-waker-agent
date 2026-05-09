@@ -50,7 +50,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := httpServer.New(log, cfg, auth)
+	srv := httpServer.New(log, cfg, auth, version)
 	go func() {
 		if err := srv.Run(ctx); err != nil {
 			log.Error("http server error", sl.Err(err))
