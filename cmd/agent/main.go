@@ -12,6 +12,7 @@ import (
 	pcsChecker "smart-pc-waker-agent/internal/pcs-checker"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
+	"smart-pc-waker-agent/internal/updater"
 	"syscall"
 
 	authorization "smart-pc-waker-agent/internal/auth"
@@ -19,6 +20,9 @@ import (
 	"github.com/MaxRomanov007/smart-pc-go-lib/logger/sl"
 	"github.com/MaxRomanov007/smart-pc-go-lib/waitable"
 )
+
+// version is set at build time via -ldflags "-X main.version=v1.2.3"
+var version = "v0.0.0"
 
 func main() {
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -29,14 +33,17 @@ func main() {
 
 	cfg := config.MustLoad(ctx)
 
-	log := logger.MustSetupLogger(ctx, cfg.Env, string(cfg.LogPath))
+	log := logger.MustSetupLogger(ctx, cfg.Env, cfg.LogPath)
 	log.Debug("debug messages are enabled")
+
+	// main.go роутер-агента
+	updater.New(ctx, log, "MaxRomanov007/smart-pc-waker-agent", version)
 
 	storage := configStorage.New(cfg)
 
-	// Auth инициализируется всегда — даже если токена ещё нет.
-	// В этом случае агент запустится без авторизации; клиент должен
-	// вызвать GET /auth/url → пройти flow → GET /auth/callback.
+	// Auth is always initialized, even if a token doesn't yet exist.
+	// In this case, the agent will launch without authorization; the
+	// client must call GET /auth/url → follow flow → GET /auth/callback.
 	auth, err := authorization.New(ctx, cfg.Auth, storage, storage)
 	if err != nil {
 		log.Error("failed to create auth", sl.Err(err))

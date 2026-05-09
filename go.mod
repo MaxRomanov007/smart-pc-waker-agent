@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/ilyakaznacheev/cleanenv v1.5.0
+	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf
 	golang.org/x/oauth2 v0.35.0
 )
 
