@@ -2,6 +2,7 @@ package updater
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -88,10 +89,12 @@ func archName() string {
 	return fmt.Sprintf("agent-linux-%s", arch)
 }
 
-// downloadBinary fetches the .tar.gz asset and returns a reader over the raw
-// binary inside the archive. The caller must close the returned ReadCloser.
+// downloadBinary fetches the .tar.gz asset, extracts the binary and returns
+// it as an in-memory reader. The HTTP response is fully consumed and closed
+// before this function returns, so the caller gets a self-contained buffer
+// with no dependency on the underlying connection.
 func downloadBinary(release ReleaseInfo) (io.ReadCloser, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, release.DownloadURL, nil)
@@ -103,19 +106,26 @@ func downloadBinary(release ReleaseInfo) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("download: %w", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
 		return nil, fmt.Errorf("server returned %d", resp.StatusCode)
 	}
 
-	binary, err := extractFromTarGz(resp.Body, archName())
+	// Extract the binary from the archive while the connection is still open,
+	// then copy it into a bytes.Buffer so resp.Body can be safely closed.
+	entry, err := extractFromTarGz(resp.Body, archName())
 	if err != nil {
-		resp.Body.Close()
 		return nil, fmt.Errorf("extract: %w", err)
 	}
+	defer entry.Close()
 
-	return binary, nil
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, entry); err != nil {
+		return nil, fmt.Errorf("buffer binary: %w", err)
+	}
+
+	return io.NopCloser(&buf), nil
 }
 
 // extractFromTarGz finds binaryName inside the .tar.gz stream and returns a

@@ -70,7 +70,15 @@ func (s *Service) run(ctx context.Context) {
 		slog.String("arch", archName()),
 	)
 
-	s.check()
+	// Wait for the network to come up before the first check.
+	// On routers the agent starts at boot before the WAN link is established.
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(30 * time.Second):
+	}
+
+	s.checkWithRetry(ctx)
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
@@ -81,22 +89,53 @@ func (s *Service) run(ctx context.Context) {
 			s.log.Info("updater stopped")
 			return
 		case <-ticker.C:
-			s.check()
+			s.checkWithRetry(ctx)
 		}
 	}
 }
 
-func (s *Service) check() {
+// checkWithRetry retries the check up to 3 times with exponential backoff.
+// This handles transient network failures at boot or after a brief WAN drop.
+func (s *Service) checkWithRetry(ctx context.Context) {
+	backoff := 2 * time.Minute
+	for attempt := 1; attempt <= 3; attempt++ {
+		err := s.check()
+		if err == nil {
+			return
+		}
+
+		s.log.Warn("update check failed, will retry",
+			slog.Int("attempt", attempt),
+			slog.Duration("backoff", backoff),
+			"err", err,
+		)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+			backoff *= 2
+		}
+	}
+}
+
+// check performs a single update check and applies it if a newer version is found.
+// Returns nil both when already up to date and after a successful update+restart.
+// Returns an error only on network/API failure so checkWithRetry can decide to retry.
+func (s *Service) check() error {
 	release, found, err := s.Check()
-	if err != nil || !found {
-		return
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
 	}
 
 	s.log.Info("applying update", slog.String("version", release.Version))
 
 	if err := apply(release); err != nil {
 		s.log.Error("update failed", sl.Err(err))
-		return
+		return nil // apply errors are not retryable — binary may be corrupt
 	}
 
 	if s.onUpdated != nil {
@@ -106,6 +145,7 @@ func (s *Service) check() {
 	// Replace the process image — init system will see a clean restart.
 	// Never returns on success.
 	restart()
+	return nil
 }
 
 // Check fetches the latest release from GitHub.
