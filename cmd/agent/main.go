@@ -72,7 +72,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv.Mount(storage, pcs)
+	checker := pcsChecker.New(ctx, log, cfg.Checker.Interval, pcs, storage, storage)
+
+	srv.Mount(storage, pcs, checker)
 
 	log.Info("set pcs can power on")
 	if err := setCanPowerOn(ctx, storage, pcs, true); err != nil {
@@ -99,8 +101,6 @@ func main() {
 		<-mqttConn.Done()
 		log.Info("mqtt connection closed")
 	}()
-
-	checker := pcsChecker.New(ctx, log, cfg.Checker.Interval, pcs, storage, storage)
 
 	waitable.WaitAll(mqttConn, srv, checker)
 }

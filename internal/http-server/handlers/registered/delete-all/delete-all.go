@@ -14,6 +14,10 @@ import (
 	"github.com/go-chi/render"
 )
 
+type RegisteredSyncer interface {
+	SyncPcs(ctx context.Context) error
+}
+
 type RegisteredGetter interface {
 	GetPcs(ctx context.Context) ([]models.Registered, error)
 }
@@ -28,13 +32,20 @@ type CanPowerOnSetter interface {
 
 func New(
 	log *slog.Logger,
+	syncer RegisteredSyncer,
 	getter RegisteredGetter,
 	deleter RegisterDeleter,
 	setter CanPowerOnSetter,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "http-server.handlers.create-registered"
+		const op = "http-server.handlers.delete-all"
 		log := log.With(sl.Op(op), sl.ReqID(r))
+
+		if err := syncer.SyncPcs(r.Context()); err != nil {
+			log.Error("failed to sync pcs", sl.Err(err))
+			render.JSON(w, r, response.InternalError())
+			return
+		}
 
 		reg, err := getter.GetPcs(r.Context())
 		if err != nil {

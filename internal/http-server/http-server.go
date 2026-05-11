@@ -15,6 +15,7 @@ import (
 	deleteAll "smart-pc-waker-agent/internal/http-server/handlers/registered/delete-all"
 	getRegistered "smart-pc-waker-agent/internal/http-server/handlers/registered/get-registered"
 	version2 "smart-pc-waker-agent/internal/http-server/handlers/version"
+	pcsChecker "smart-pc-waker-agent/internal/pcs-checker"
 	pcsService "smart-pc-waker-agent/internal/services/pcs-service"
 	configStorage "smart-pc-waker-agent/internal/storage/config-storage"
 
@@ -75,6 +76,7 @@ func New(
 func (s *Server) Mount(
 	storage *configStorage.Storage,
 	service *pcsService.Service,
+	checker *pcsChecker.Checker,
 ) {
 	v := validator.New()
 	v.RegisterTagNameFunc(jsonTagName.New())
@@ -83,7 +85,7 @@ func (s *Server) Mount(
 		r.Get("/", getRegistered.New(s.log, storage))
 		r.With(reqmw.New[createRegistered.Request](s.log, v)).
 			Post("/", createRegistered.New(s.log, service, storage))
-		r.Delete("/", deleteAll.New(s.log, storage, storage, service))
+		r.Delete("/", deleteAll.New(s.log, checker, storage, storage, service))
 	})
 }
 

@@ -14,7 +14,10 @@ import (
 )
 
 type Checker struct {
-	done chan struct{}
+	done              chan struct{}
+	serverGetter      ServerGetter
+	registeredGetter  RegisteredGetter
+	registeredDeleter RegisteredDeleter
 }
 
 type ServerGetter interface {
@@ -41,7 +44,10 @@ func New(
 	log := logger.With(sl.Component(component))
 
 	checker := &Checker{
-		done: make(chan struct{}),
+		done:              make(chan struct{}),
+		serverGetter:      serverGetter,
+		registeredGetter:  registeredGetter,
+		registeredDeleter: registeredDeleter,
 	}
 
 	log.Info("starting pcs checker")
@@ -60,12 +66,7 @@ func New(
 			case <-ticker.C:
 				log.Info("checking pcs")
 
-				if err := syncPcs(
-					ctx,
-					serverGetter,
-					registeredGetter,
-					registeredDeleter,
-				); err != nil {
+				if err := checker.SyncPcs(ctx); err != nil {
 					log.Error("failed to sync pcs", sl.Err(err))
 				}
 			}
@@ -75,20 +76,15 @@ func New(
 	return checker
 }
 
-func syncPcs(
-	ctx context.Context,
-	serverGetter ServerGetter,
-	registeredGetter RegisteredGetter,
-	registeredDeleter RegisteredDeleter,
-) error {
+func (c *Checker) SyncPcs(ctx context.Context) error {
 	const op = "pcs-checker.syncPcs"
 
-	registeredPcs, err := registeredGetter.GetPcs(ctx)
+	registeredPcs, err := c.registeredGetter.GetPcs(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: failed to get registered pcs: %w", op, err)
 	}
 
-	serverPcs, err := serverGetter.GetPcs(ctx)
+	serverPcs, err := c.serverGetter.GetPcs(ctx)
 	if err != nil {
 		return fmt.Errorf("%s: failed to get pcs from server: %w", op, err)
 	}
@@ -103,7 +99,7 @@ func syncPcs(
 		}
 
 		if !found {
-			if err := registeredDeleter.DeletePcByID(ctx, registered.ID); err != nil {
+			if err := c.registeredDeleter.DeletePcByID(ctx, registered.ID); err != nil {
 				errs = append(
 					errs,
 					fmt.Errorf("failed to delete registered pc (id: %s): %w", registered.ID, err),

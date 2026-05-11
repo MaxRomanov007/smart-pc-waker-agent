@@ -17,7 +17,7 @@ type RegisteredGetter interface {
 
 func New(log *slog.Logger, getter RegisteredGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "http-server.handlers.create-registered"
+		const op = "http-server.handlers.get-registered"
 		log := log.With(sl.Op(op), sl.ReqID(r))
 
 		registered, err := getter.GetPcs(r.Context())

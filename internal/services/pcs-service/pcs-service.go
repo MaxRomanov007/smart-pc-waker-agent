@@ -7,6 +7,7 @@ import (
 	"net/http"
 	authorization "smart-pc-waker-agent/internal/auth"
 	"smart-pc-waker-agent/internal/config"
+	"smart-pc-waker-agent/internal/services"
 
 	"github.com/MaxRomanov007/smart-pc-go-lib/api/response"
 	apiclient "github.com/MaxRomanov007/smart-pc-go-lib/authorization/api-client"
@@ -57,6 +58,9 @@ func (s *Service) GetPcs(ctx context.Context) ([]models.Pc, error) {
 		return nil, fmt.Errorf("%s: failed to do request: %w", op, err)
 	}
 
+	if resp.Status != response.StatusNotFound {
+		return nil, services.ErrNotFound
+	}
 	if resp.Status != response.StatusOK {
 		return nil, fmt.Errorf("%s: status is not OK: %s", op, resp.Status)
 	}

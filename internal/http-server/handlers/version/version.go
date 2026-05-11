@@ -15,7 +15,7 @@ type Response struct {
 
 func New(log *slog.Logger, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "http-server.handlers.auth.callback"
+		const op = "http-server.handlers.version"
 		log := log.With(sl.Op(op), sl.ReqID(r))
 
 		log.Info("returning version", slog.String("version", version))
