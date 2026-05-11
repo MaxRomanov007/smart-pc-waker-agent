@@ -58,7 +58,7 @@ func (s *Service) GetPcs(ctx context.Context) ([]models.Pc, error) {
 		return nil, fmt.Errorf("%s: failed to do request: %w", op, err)
 	}
 
-	if resp.Status != response.StatusNotFound {
+	if resp.Status == response.StatusNotFound {
 		return nil, services.ErrNotFound
 	}
 	if resp.Status != response.StatusOK {

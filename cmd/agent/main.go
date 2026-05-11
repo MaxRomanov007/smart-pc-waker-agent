@@ -77,7 +77,7 @@ func main() {
 	srv.Mount(storage, pcs, checker)
 
 	log.Info("set pcs can power on")
-	if err := setCanPowerOn(ctx, storage, pcs, true); err != nil {
+	if err := setCanPowerOn(ctx, storage, pcs, checker, true); err != nil {
 		log.Error("failed to set can_power_on", sl.Err(err))
 	}
 
@@ -85,7 +85,7 @@ func main() {
 		<-signalCtx.Done()
 
 		log.Info("set pcs can not power on")
-		if err := setCanPowerOn(ctx, storage, pcs, false); err != nil {
+		if err := setCanPowerOn(ctx, storage, pcs, checker, false); err != nil {
 			log.Error("failed to set can_power_on", sl.Err(err))
 		}
 
@@ -109,9 +109,14 @@ func setCanPowerOn(
 	ctx context.Context,
 	storage *configStorage.Storage,
 	service *pcsService.Service,
+	checker *pcsChecker.Checker,
 	canPowerOn bool,
 ) error {
 	const op = "setCanPowerOn"
+
+	if err := checker.SyncPcs(ctx); err != nil {
+		return fmt.Errorf("%s: failed to sync pcs: %w", op, err)
+	}
 
 	registered, err := storage.GetPcs(ctx)
 	if err != nil {
