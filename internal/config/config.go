@@ -58,7 +58,7 @@ type Auth struct {
 }
 
 type Oauth2 struct {
-	ClientID string         `yaml:"client_id" env-default:"smart-pc-cmd"`
+	ClientID string         `yaml:"client_id" env-default:"smart-pc-waker"`
 	Scopes   []string       `yaml:"scopes"    env-default:"offline,mqtt:pc:state:write,mqtt:pc:command:read,mqtt:pc:log:write,mqtt:pc:status:write"`
 	Endpoint Oauth2Endpoint `yaml:"endpoint"`
 }
